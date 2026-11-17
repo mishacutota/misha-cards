@@ -1,0 +1,9 @@
+{
+  "name": "MISHA BANK",
+  "templateId": "empty",
+  "agent": {
+    "profile": "light",
+    "planApproval": true,
+    "askUser": true
+  }
+}

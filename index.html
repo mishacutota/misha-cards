@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MISHA CARDS — коллекция карточек и подарки</title>
+  <meta name="description" content="Игра в коллекционные карточки: уникальный ник, ежедневные карточки, обмен и подарки другим игрокам. Работает на GitHub Pages." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🃏</text></svg>" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="orbs" aria-hidden="true">
+    <span class="orb orb-1"></span>
+    <span class="orb orb-2"></span>
+    <span class="orb orb-3"></span>
+  </div>
+
+  <main class="app">
+    <!-- ================= ВХОД ================= -->
+    <section id="screen-auth" class="screen">
+      <div class="auth-card">
+        <div class="brand brand--big">
+          <span class="brand-mark">🃏</span>
+          <div class="brand-text">
+            <h1>MISHA CARDS</h1>
+            <p class="brand-sub">коллекция карточек и подарки</p>
+          </div>
+        </div>
+
+        <div class="switch" role="tablist">
+          <button class="switch-btn active" data-mode="login" type="button">Вход</button>
+          <button class="switch-btn" data-mode="register" type="button">Новый игрок</button>
+        </div>
+
+        <form id="auth-form" class="auth-form" autocomplete="off" novalidate>
+          <label class="field">
+            <span>Уникальный ник</span>
+            <input id="auth-nick" type="text" maxlength="16" placeholder="например, misha_king" required />
+          </label>
+          <label class="field">
+            <span>ПИН-код (4–6 цифр)</span>
+            <input id="auth-pin" type="password" inputmode="numeric" maxlength="6" placeholder="••••" required />
+          </label>
+          <p id="auth-error" class="error" role="alert"></p>
+          <button id="auth-submit" class="btn primary wide" type="submit">Войти</button>
+        </form>
+
+        <p class="note">
+          Ник занять дважды нельзя. При регистрации ты сразу получаешь стартовую коллекцию
+          и первый ежедневный дроп. Всё хранится в этом браузере.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= КОЛЛЕКЦИЯ ================= -->
+    <section id="screen-bank" class="screen hidden">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">🃏</span>
+          <div class="brand-text">
+            <h1>MISHA CARDS</h1>
+            <p class="brand-sub">твоя полка</p>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <div class="balance-chip">
+            <span class="balance-label">искры</span>
+            <strong id="top-balance">0</strong>
+          </div>
+          <button id="btn-logout" class="btn ghost" type="button">Выйти</button>
+        </div>
+      </header>
+
+      <div class="user-line">
+        <div class="avatar" id="user-avatar">M</div>
+        <div class="user-meta">
+          <strong id="user-nick">nick</strong>
+          <span id="user-since" class="muted"></span>
+        </div>
+      </div>
+
+      <div id="daily-banner" class="daily-banner">
+        <div class="daily-left">
+          <span class="daily-emoji">🎁</span>
+          <div>
+            <strong id="daily-title">Ежедневный дроп</strong>
+            <span id="daily-sub" class="muted small">каждые 24 часа — новые карточки</span>
+          </div>
+        </div>
+        <span id="daily-timer" class="daily-timer">готово</span>
+      </div>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="wallet" type="button">Коллекция</button>
+        <button class="tab" data-tab="send" type="button">Подарить</button>
+        <button class="tab" data-tab="bank" type="button">Тираж</button>
+      </nav>
+
+      <!-- ---------- КОЛЛЕКЦИЯ ---------- -->
+      <section class="panel" data-panel="wallet">
+        <div class="wallet-summary">
+          <div>
+            <span class="muted small">искры коллекции</span>
+            <div class="big-num"><span id="wallet-balance">0</span><span class="unit">✨</span></div>
+          </div>
+          <div class="summary-right">
+            <span class="muted small">карточек</span>
+            <div class="big-num small-num" id="wallet-count">0</div>
+          </div>
+        </div>
+
+        <div id="wallet-grid" class="card-grid"></div>
+
+        <h3 class="section-title">История</h3>
+        <ul id="history-list" class="history"></ul>
+      </section>
+
+      <!-- ---------- ПОДАРОК ---------- -->
+      <section class="panel hidden" data-panel="send">
+        <label class="field">
+          <span>Ник получателя</span>
+          <input id="to-nick" type="text" maxlength="16" placeholder="кому дарим карточки?" autocomplete="off" />
+        </label>
+        <p id="send-hint" class="hint"></p>
+        <p id="send-note" class="hint warn"></p>
+
+        <h3 class="section-title">Какие карточки и сколько</h3>
+        <div id="send-rows" class="send-rows"></div>
+
+        <div class="send-total">
+          <div>
+            <span class="muted small">итого искр</span>
+            <div class="big-num small-num"><span id="send-total-value">0</span><span class="unit">✨</span></div>
+          </div>
+          <span id="send-total-count" class="muted small">ничего не выбрано</span>
+        </div>
+
+        <button id="btn-send" class="btn primary wide" type="button" disabled>Подарить карточки</button>
+        <p class="note">Карточки сразу уходят из твоей коллекции и появляются у получателя. Никаких комиссий.</p>
+      </section>
+
+      <!-- ---------- ТИРАЖ ---------- -->
+      <section class="panel hidden" data-panel="bank">
+        <h3 class="section-title">Тираж карточек</h3>
+        <p class="muted small">У каждой карточки ограниченный тираж. Когда остаток закончится — новые такие карточки в дроп не попадут.</p>
+        <div id="supply-list" class="supply-list"></div>
+
+        <h3 class="section-title">Топ коллекционеров</h3>
+        <ul id="leaderboard" class="leaderboard"></ul>
+
+        <h3 class="section-title">Соседи по игре</h3>
+        <p class="muted small">Нужен кто-то для подарка? Создай демо-игроков — они получат карточки из тиража.</p>
+        <div class="btn-row">
+          <button id="btn-demo" class="btn" type="button">Создать демо-игроков</button>
+        </div>
+
+        <h3 class="section-title">Перенос коллекции</h3>
+        <p class="muted small">Данные живут в браузере. Выгрузи JSON и загрузи его на другом устройстве, чтобы перенести коллекцию.</p>
+        <div class="btn-row">
+          <button id="btn-export" class="btn" type="button">Выгрузить JSON</button>
+          <label class="btn file-btn">
+            Загрузить JSON
+            <input id="import-file" type="file" accept="application/json,.json" />
+          </label>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/cards.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
