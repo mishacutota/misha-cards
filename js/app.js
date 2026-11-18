@@ -6,7 +6,7 @@
   const CARDS = window.BANK_CARDS;
   const store = window.BankStore;
   const el = (id) => document.getElementById(id);
-  const state = { key: null, user: null, send: {}, adminSend: {}, mode: 'login', nextDailyAt: 0, busy: false, isAdmin: false, lastRecipient: '' };
+  const state = { key: null, user: null, send: {}, adminSend: {}, mode: 'login', nextDailyAt: 0, busy: false, isAdmin: false, lastRecipient: '', netDown: false };
   const number = (value) => new Intl.NumberFormat('ru-RU').format(value);
   let toastTimer = null;
   let dailyTimer = null;
@@ -151,22 +151,10 @@
     if (state.user) {
       state.nextDailyAt = state.user.lastDailyAt + 86400000;
       renderAll();
-      updateOnlineBadge();
+  
     } else {
       toast('Твой профиль не найден в общей базе', true);
       logout();
-    }
-  }
-
-  function updateOnlineBadge() {
-    const badge = el('online-badge');
-    if (!badge) return;
-    if (store.isOnline()) {
-      badge.textContent = '🌐 общая база';
-      badge.classList.remove('offline');
-    } else {
-      badge.textContent = '📴 локально';
-      badge.classList.add('offline');
     }
   }
 
@@ -185,7 +173,7 @@
     el('top-balance').textContent = `${number(sparks)} ✨`;
     el('wallet-balance').textContent = number(sparks);
     el('wallet-count').textContent = String(store.countCards(state.user.inventory));
-    updateOnlineBadge();
+
   }
 
   function describeCards(inventory) {
@@ -489,7 +477,7 @@
     renderWallet();
     renderSend();
     renderBank();
-    updateOnlineBadge();
+
     if (state.isAdmin && document.querySelector('[data-panel="admin"]:not(.hidden)')) renderAdmin();
     // запоминаем ник при открытии экрана подарка
     if (state.key && !el('to-nick').value && state.lastRecipient) {
@@ -631,7 +619,7 @@
     booted = true;
     setMode('login');
     const ok = await store.pull();
-    updateOnlineBadge();
+
     if (!ok) {
       state.netDown = true;
       booted = false;
