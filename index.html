@@ -112,6 +112,9 @@
 
         <h3 class="section-title">История</h3>
         <ul id="history-list" class="history"></ul>
+        <div class="history-actions">
+          <button id="btn-clear-history" class="btn ghost small" type="button">Очистить историю</button>
+        </div>
       </section>
 
       <!-- ---------- ПОДАРОК ---------- -->
@@ -149,26 +152,25 @@
 
       <!-- ---------- АДМИН ---------- -->
       <section class="panel hidden" data-panel="admin" id="panel-admin">
-        <h3 class="section-title">Пользователи</h3>
-        <div id="admin-users" class="admin-users"></div>
-
-        <h3 class="section-title">Выдать карточки</h3>
-        <label class="field">
-          <span>Кому</span>
-          <select id="admin-target" class="field-select"></select>
-        </label>
-        <div id="admin-card-rows" class="send-rows"></div>
-
-        <div class="send-total">
-          <div>
-            <span class="muted small">итого искр</span>
-            <div class="big-num small-num"><span id="admin-total-value">0</span><span class="unit">✨</span></div>
+        <div class="admin-shell">
+          <div class="admin-head">
+            <div>
+              <h3 class="section-title">Управление игроками</h3>
+              <p class="muted small">Выбери игрока, посмотри его коллекцию и измени количество карточек.</p>
+            </div>
           </div>
-          <span id="admin-total-count" class="muted small">ничего не выбрано</span>
-        </div>
 
-        <button id="btn-admin-grant" class="btn primary wide" type="button" disabled>Выдать карточки</button>
-        <p class="note">Выдача добавляет карточки в коллекцию выбранных игроков.</p>
+          <label class="field">
+            <span>Игрок</span>
+            <select id="admin-target" class="field-select"></select>
+          </label>
+
+          <div id="admin-profile" class="admin-profile"></div>
+
+          <h3 class="section-title">Карточки игрока</h3>
+          <div id="admin-card-rows" class="admin-card-rows"></div>
+          <p class="note">Изменения применяются сразу. При изъятии карточки не уйдут в минус: заберётся максимум из того, что есть.</p>
+        </div>
       </section>
     </section>
   </main>

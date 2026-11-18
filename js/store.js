@@ -402,6 +402,41 @@
     });
   }
 
+  async function adjustUserCards(targetNick, cardId, amount, mode) {
+    const card = window.BANK_CARDS.find(item => item.id === cardId);
+    if (!card) return { ok: false, error: 'Карточка не найдена.' };
+    const requested = Number(amount);
+    if (!Number.isInteger(requested) || requested <= 0) {
+      return { ok: false, error: 'Укажи положительное число карточек.' };
+    }
+    return withLatest(() => {
+      const key = normalizeNick(targetNick);
+      const user = db.users[key];
+      if (!user) return { ok: false, error: 'Пользователь не найден.' };
+      if (!user.inventory || typeof user.inventory !== 'object') user.inventory = normalizeInventory({});
+      const current = user.inventory[cardId] || 0;
+      if (mode === 'add') {
+        user.inventory[cardId] = current + requested;
+        addHistory({ type: 'in', userKey: key, peer: 'admin', cards: { [cardId]: requested }, memo: 'Выдача от админа' });
+        return { ok: true, adjusted: requested, removedMax: false };
+      }
+      const removed = Math.min(requested, current);
+      if (removed <= 0) return { ok: false, error: 'У игрока нет таких карточек.' };
+      user.inventory[cardId] = current - removed;
+      addHistory({ type: 'out', userKey: key, peer: 'admin', cards: { [cardId]: removed }, memo: 'Изъятие админом' });
+      return { ok: true, adjusted: removed, removedMax: removed < requested };
+    });
+  }
+
+  async function clearHistory(userKey) {
+    const key = normalizeNick(userKey);
+    return withLatest(() => {
+      const before = db.history.length;
+      db.history = db.history.filter(item => item.userKey !== key);
+      return { ok: true, removed: before - db.history.length };
+    });
+  }
+
   function exportData() {
     return JSON.stringify({ format: 'misha-cards-export', version: 2, data: db }, null, 2);
   }
@@ -436,6 +471,8 @@
     createDemoUsers,
     getUsers,
     deleteUser,
+    adjustUserCards,
+    clearHistory,
     grantCards,
     exportData,
     importData,

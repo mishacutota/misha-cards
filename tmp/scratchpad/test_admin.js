@@ -1,0 +1,22 @@
+const fs = require('fs');
+global.window = { BANK_CARDS: null, RARITY_WEIGHT: { common: 52, rare: 28, epic: 14, legend: 6 } };
+eval(fs.readFileSync('js/cards.js','utf8'));
+const store = {};
+global.localStorage = { getItem: k => store[k]||null, setItem: (k,v)=>{store[k]=v;}, removeItem: k=>{delete store[k];} };
+global.fetch = fetch;
+eval(fs.readFileSync('js/store.js','utf8'));
+const S = global.window.BankStore;
+(async () => {
+  await S.pull();
+  await S.register('admintest_user', '1234');
+  console.log('before', S.getUser('admintest_user').inventory.puff);
+  let r = await S.adjustUserCards('admintest_user', 'puff', 2, 'add');
+  console.log('add', r);
+  console.log('after add', S.getUser('admintest_user').inventory.puff);
+  r = await S.adjustUserCards('admintest_user', 'puff', 5, 'remove');
+  console.log('remove', r);
+  console.log('after remove', S.getUser('admintest_user').inventory.puff);
+  r = await S.clearHistory('admintest_user');
+  console.log('clearHistory', r, 'history length', S.getHistory('admintest_user').length);
+  console.log('DONE');
+})();

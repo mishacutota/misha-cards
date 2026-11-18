@@ -6,7 +6,7 @@
   const CARDS = window.BANK_CARDS;
   const store = window.BankStore;
   const el = (id) => document.getElementById(id);
-  const state = { key: null, user: null, send: {}, adminSend: {}, mode: 'login', nextDailyAt: 0, busy: false, isAdmin: false, lastRecipient: '', netDown: false };
+  const state = { key: null, user: null, send: {}, adminSend: {}, adminTargetKey: '', adminAmounts: {}, mode: 'login', nextDailyAt: 0, busy: false, isAdmin: false, lastRecipient: '', netDown: false };
   const number = (value) => new Intl.NumberFormat('ru-RU').format(value);
   let toastTimer = null;
   let dailyTimer = null;
@@ -168,7 +168,7 @@
     if (!state.user) return;
     el('user-nick').textContent = state.user.nick;
     el('user-avatar').textContent = state.user.nick.slice(0, 1).toUpperCase();
-    el('user-since').textContent = 'играет с ' + new Date(state.user.createdAt).toLocaleDateString('ru-RU');
+    el('user-since').textContent = 'с нами с ' + new Date(state.user.createdAt).toLocaleDateString('ru-RU');
     const sparks = store.total(state.user.inventory);
     el('top-balance').textContent = `${number(sparks)} ✨`;
     el('wallet-balance').textContent = number(sparks);
@@ -217,6 +217,7 @@
   }
 
   function renderWallet() {
+    if (!state.user) return;
     const owned = CARDS.filter(card => state.user.inventory[card.id] > 0);
     el('wallet-grid').innerHTML = owned.length
       ? owned.map(card => cardTile(card, state.user.inventory[card.id])).join('')
@@ -271,6 +272,7 @@
   }
 
   function renderSend() {
+    if (!state.user) return;
     renderRecentRecipients();
     const owned = CARDS.filter(card => state.user.inventory[card.id] > 0);
     if (!owned.length) {
@@ -397,54 +399,57 @@
 
   function renderAdmin() {
     const users = store.getUsers().filter(u => u.key !== 'admin');
-    el('admin-users').innerHTML = users.length
-      ? users.map(u => `
-           <div class="admin-user">
-             <div class="admin-user-info">
-               <span class="au-nick">${escapeHtml(u.nick)}</span>
-               <span class="au-stats">${u.cards} карточек · ${number(u.sparks)} ✨</span>
-             </div>
-             <button type="button" class="btn danger small" data-del="${escapeHtml(u.key)}">Удалить</button>
-           </div>`).join('')
-      : '<div class="empty">Пока нет пользователей</div>';
-
     const sel = el('admin-target');
-    sel.innerHTML = '<option value="">— выбери —</option>' +
-      '<option value="__all__">Всем игрокам</option>' +
+    const prev = state.adminTargetKey;
+    sel.innerHTML = '<option value="">— выбери игрока —</option>' +
       users.map(u => `<option value="${escapeHtml(u.key)}">${escapeHtml(u.nick)}</option>`).join('');
+    if (prev && users.some(u => u.key === prev)) sel.value = prev;
+    else if (users.length) { sel.value = users[0].key; state.adminTargetKey = users[0].key; }
+    else { sel.value = ''; state.adminTargetKey = ''; }
+    state.adminTargetKey = sel.value;
 
-    el('admin-card-rows').innerHTML = CARDS.map(card => {
-      const picked = state.adminSend[card.id] || 0;
+    const profile = el('admin-profile');
+    const rows = el('admin-card-rows');
+    if (!state.adminTargetKey) {
+      profile.innerHTML = '<div class="empty">Выбери игрока, чтобы увидеть его коллекцию</div>';
+      rows.innerHTML = '';
+      return;
+    }
+    const user = store.getUser(state.adminTargetKey);
+    if (!user) {
+      profile.innerHTML = '<div class="empty">Игрок не найден</div>';
+      rows.innerHTML = '';
+      return;
+    }
+    profile.innerHTML = `
+      <div class="admin-profile-card">
+        <div class="admin-profile-main">
+          <div class="avatar">${escapeHtml(user.nick.slice(0, 1).toUpperCase())}</div>
+          <div class="admin-profile-meta">
+            <strong>${escapeHtml(user.nick)}</strong>
+            <span class="muted small">с нами с ${new Date(user.createdAt).toLocaleDateString('ru-RU')} · ${store.countCards(user.inventory)} карточек · ${number(store.total(user.inventory))} ✨</span>
+          </div>
+        </div>
+        <button type="button" class="btn danger small" data-del-user="${escapeHtml(state.adminTargetKey)}">Удалить профиль</button>
+      </div>`;
+
+    rows.innerHTML = CARDS.map(card => {
+      const have = user.inventory[card.id] || 0;
+      const amount = state.adminAmounts[card.id] || 0;
       return `
-        <div class="send-row ${picked ? 'picked' : ''}" data-card="${card.id}">
+        <div class="admin-card-row" data-card="${card.id}">
           <div class="send-mini rarity-${card.rarityKey}" style="--card-bg:${card.bg}"><span class="send-emoji">${card.emoji}</span></div>
           <div class="send-info">
             <strong>${escapeHtml(card.name)}</strong>
-            <small>${number(card.spark)} ✨ за карточку</small>
+            <small>у игрока: ${have} шт · ${number(card.spark)} ✨ за карточку</small>
           </div>
-          <div class="stepper">
-            <button type="button" data-act="minus" ${picked <= 0 ? 'disabled' : ''}>−</button>
-            <span class="stepper-val">${picked}</span>
-            <button type="button" data-act="plus">+</button>
+          <div class="admin-actions">
+            <input class="admin-amount" type="number" min="1" step="1" inputmode="numeric" data-card="${card.id}" value="${amount || ''}" placeholder="0" />
+            <button type="button" class="btn primary small" data-act="add" data-card="${card.id}">Добавить</button>
+            <button type="button" class="btn ghost small" data-act="remove" data-card="${card.id}">Забрать</button>
           </div>
         </div>`;
     }).join('');
-    updateAdminTotals();
-  }
-
-  function updateAdminTotals() {
-    const spark = CARDS.reduce((sum, card) => sum + (state.adminSend[card.id] || 0) * card.spark, 0);
-    const count = store.countCards(state.adminSend);
-    el('admin-total-value').textContent = number(spark);
-    el('admin-total-count').textContent = count ? `${count} карточек · ${number(spark)} ✨` : 'ничего не выбрано';
-    el('btn-admin-grant').disabled = !count || !el('admin-target').value;
-  }
-
-  function changeAdminAmount(cardId, delta) {
-    const next = Math.max(0, (state.adminSend[cardId] || 0) + delta);
-    if (next) state.adminSend[cardId] = next;
-    else delete state.adminSend[cardId];
-    renderAdmin();
   }
 
   async function doDeleteUser(key) {
@@ -455,25 +460,43 @@
     setBusy(false);
     if (!result.ok) { toast(result.error, true); return; }
     toast('Пользователь удалён');
+    if (state.adminTargetKey === key) state.adminTargetKey = '';
+    state.adminAmounts = {};
     renderAdmin();
-    renderAll();
+    renderBank();
   }
 
-  async function doGrant() {
+  async function doAdjustCard(cardId, mode) {
     if (state.busy) return;
-    const target = el('admin-target').value;
-    if (!target) { toast('Выбери, кому выдать карточки', true); return; }
+    const amount = Number(state.adminAmounts[cardId] || 0);
+    if (!Number.isInteger(amount) || amount <= 0) { toast('Укажи количество карточек', true); return; }
+    const target = state.adminTargetKey;
+    if (!target) { toast('Выбери игрока', true); return; }
     setBusy(true);
-    const result = await store.grantCards(target === '__all__' ? 'all' : target, state.adminSend);
+    const result = await store.adjustUserCards(target, cardId, amount, mode);
     setBusy(false);
     if (!result.ok) { toast(result.error, true); return; }
-    state.adminSend = {};
-    toast('Карточки выданы');
+    if (mode === 'remove' && result.removedMax) toast(`Забрано ${result.adjusted} (максимум)`);
+    else toast(mode === 'add' ? 'Карточки добавлены' : 'Карточки забраны');
+    state.adminAmounts[cardId] = 0;
+    if (state.key) state.user = store.getUser(state.key);
     renderAdmin();
-    renderAll();
+    renderBank();
+  }
+
+  async function doClearHistory() {
+    if (state.busy || !state.key) return;
+    if (!window.confirm('Очистить всю историю? Действие нельзя отменить.')) return;
+    setBusy(true);
+    const result = await store.clearHistory(state.key);
+    setBusy(false);
+    if (!result.ok) { toast(result.error, true); return; }
+    toast('История очищена');
+    renderWallet();
   }
 
   function renderAll() {
+    renderHeader();
     renderWallet();
     renderSend();
     renderBank();
@@ -577,24 +600,36 @@
     });
 
     const adminRows = el('admin-card-rows');
-    if (adminRows) adminRows.addEventListener('click', event => {
-      const button = event.target.closest('button[data-act]');
-      if (!button) return;
-      const row = button.closest('[data-card]');
-      if (row) changeAdminAmount(row.dataset.card, button.dataset.act === 'plus' ? 1 : -1);
-    });
-
-    const adminUsers = el('admin-users');
-    if (adminUsers) adminUsers.addEventListener('click', event => {
-      const button = event.target.closest('button[data-del]');
-      if (button) doDeleteUser(button.dataset.del);
-    });
+    if (adminRows) {
+      adminRows.addEventListener('click', event => {
+        const button = event.target.closest('button[data-act][data-card]');
+        if (!button) return;
+        doAdjustCard(button.dataset.card, button.dataset.act);
+      });
+      adminRows.addEventListener('input', event => {
+        const input = event.target.closest('input.admin-amount[data-card]');
+        if (!input) return;
+        const value = Math.max(0, parseInt(input.value, 10) || 0);
+        state.adminAmounts[input.dataset.card] = value;
+        if (String(value) !== input.value) input.value = value ? String(value) : '';
+      });
+    }
 
     const adminTarget = el('admin-target');
-    if (adminTarget) adminTarget.addEventListener('change', updateAdminTotals);
+    if (adminTarget) adminTarget.addEventListener('change', () => {
+      state.adminTargetKey = adminTarget.value;
+      state.adminAmounts = {};
+      renderAdmin();
+    });
 
-    const btnGrant = el('btn-admin-grant');
-    if (btnGrant) btnGrant.addEventListener('click', doGrant);
+    const panelAdmin = el('panel-admin');
+    if (panelAdmin) panelAdmin.addEventListener('click', event => {
+      const button = event.target.closest('button[data-del-user]');
+      if (button) doDeleteUser(button.dataset.delUser);
+    });
+
+    const btnClearHistory = el('btn-clear-history');
+    if (btnClearHistory) btnClearHistory.addEventListener('click', doClearHistory);
   }
 
   let booted = false;
