@@ -93,6 +93,7 @@
         <button class="tab active" data-tab="wallet" type="button">Коллекция</button>
         <button class="tab" data-tab="send" type="button">Подарить</button>
         <button class="tab" data-tab="bank" type="button">Тираж</button>
+        <button class="tab hidden" data-tab="admin" type="button" id="tab-admin">Админ</button>
       </nav>
 
       <!-- ---------- КОЛЛЕКЦИЯ ---------- -->
@@ -120,6 +121,7 @@
           <span>Ник получателя</span>
           <input id="to-nick" type="text" maxlength="16" placeholder="кому дарим карточки?" autocomplete="off" />
         </label>
+        <div id="recent-recipients" class="recent-recipients"></div>
         <p id="send-hint" class="hint"></p>
         <p id="send-note" class="hint warn"></p>
 
@@ -161,6 +163,30 @@
             <input id="import-file" type="file" accept="application/json,.json" />
           </label>
         </div>
+      </section>
+
+      <!-- ---------- АДМИН ---------- -->
+      <section class="panel hidden" data-panel="admin" id="panel-admin">
+        <h3 class="section-title">Пользователи</h3>
+        <div id="admin-users" class="admin-users"></div>
+
+        <h3 class="section-title">Выдать карточки</h3>
+        <label class="field">
+          <span>Кому</span>
+          <select id="admin-target" class="field-select"></select>
+        </label>
+        <div id="admin-card-rows" class="send-rows"></div>
+
+        <div class="send-total">
+          <div>
+            <span class="muted small">итого искр</span>
+            <div class="big-num small-num"><span id="admin-total-value">0</span><span class="unit">✨</span></div>
+          </div>
+          <span id="admin-total-count" class="muted small">ничего не выбрано</span>
+        </div>
+
+        <button id="btn-admin-grant" class="btn primary wide" type="button" disabled>Выдать карточки</button>
+        <p class="note">Выдача добавляет карточки в коллекцию выбранных игроков.</p>
       </section>
     </section>
   </main>

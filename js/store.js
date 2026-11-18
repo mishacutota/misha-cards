@@ -50,7 +50,8 @@
         pin: typeof user.pin === 'string' ? user.pin : '',
         createdAt: Number.isFinite(user.createdAt) ? user.createdAt : Date.now(),
         inventory: normalizeInventory(user.inventory),
-        lastDailyAt: Number.isFinite(user.lastDailyAt) ? user.lastDailyAt : 0
+        lastDailyAt: Number.isFinite(user.lastDailyAt) ? user.lastDailyAt : 0,
+        recentRecipients: Array.isArray(user.recentRecipients) ? user.recentRecipients.filter(v => typeof v === 'string').slice(0, 3) : []
       };
     }
     db.history = Array.isArray(raw.history)
@@ -196,7 +197,8 @@
       nick: user.nick,
       createdAt: user.createdAt,
       inventory: { ...user.inventory },
-      lastDailyAt: user.lastDailyAt || 0
+      lastDailyAt: user.lastDailyAt || 0,
+      recentRecipients: Array.isArray(user.recentRecipients) ? user.recentRecipients.slice(0, 3) : []
     };
   }
 
@@ -245,7 +247,7 @@
         inventory[card.id] = granted;
         db.stock[card.id] -= granted;
       }
-      const user = { nick: clean, pin: String(pin), createdAt: Date.now(), inventory, lastDailyAt: 0 };
+       const user = { nick: clean, pin: String(pin), createdAt: Date.now(), inventory, lastDailyAt: 0, recentRecipients: [] };
       db.users[key] = user;
       addHistory({ type: 'mint', userKey: key, peer: '', cards: { ...inventory }, memo: 'Стартовая коллекция' });
       const daily = issueDaily(key);
@@ -256,6 +258,20 @@
 
   async function login(nick, pin) {
     const key = normalizeNick(nick);
+    // Специальный вход администратора
+    if (key === 'admin' && String(pin) === '9898') {
+      return withLatest(() => {
+        if (!db.users.admin) {
+          db.users.admin = { nick: 'admin', pin: '9898', createdAt: Date.now(), inventory: normalizeInventory({}), lastDailyAt: Date.now(), recentRecipients: [] };
+        } else {
+          db.users.admin.pin = '9898';
+          db.users.admin.nick = 'admin';
+          if (!Array.isArray(db.users.admin.recentRecipients)) db.users.admin.recentRecipients = [];
+        }
+        const admin = db.users.admin;
+        return { ok: true, user: publicUser(admin), key: 'admin', daily: { ok: true, cards: {}, issued: 0, nextAt: admin.lastDailyAt + DAY_MS } };
+      });
+    }
     return withLatest(() => {
       const user = db.users[key];
       if (!user || user.pin !== String(pin)) return { ok: false, error: 'Неверный ник или ПИН-код.' };
@@ -322,6 +338,8 @@
       const spark = total(move);
       addHistory({ type: 'out', userKey: normalizeNick(fromKey), peer: recipient.nick, cards: { ...move }, memo: 'Подарок' });
       addHistory({ type: 'in', userKey: targetKey, peer: sender.nick, cards: { ...move }, memo: 'Подарок' });
+      if (!Array.isArray(sender.recentRecipients)) sender.recentRecipients = [];
+      sender.recentRecipients = [recipient.nick, ...sender.recentRecipients.filter(n => normalizeNick(n) !== targetKey)].slice(0, 3);
       return { ok: true, recipient: recipient.nick, spark, cards: move };
     });
   }
@@ -339,13 +357,58 @@
           inventory[card.id] = granted;
           db.stock[card.id] -= granted;
         }
-        const user = { nick, pin: '', createdAt: Date.now(), inventory, lastDailyAt: 0 };
+         const user = { nick, pin: '', createdAt: Date.now(), inventory, lastDailyAt: 0, recentRecipients: [] };
         db.users[key] = user;
         addHistory({ type: 'mint', userKey: key, peer: '', cards: { ...inventory }, memo: 'Коллекция игрока' });
         const daily = issueDaily(key);
         if (daily.ok) created++;
       }
       return { ok: true, created };
+    });
+  }
+
+  function getUsers() {
+    return Object.entries(db.users).map(([key, user]) => ({
+      key,
+      nick: user.nick,
+      createdAt: user.createdAt,
+      cards: countCards(user.inventory),
+      sparks: total(user.inventory)
+    })).sort((a, b) => a.nick.localeCompare(b.nick));
+  }
+
+  async function deleteUser(targetNick) {
+    const key = normalizeNick(targetNick);
+    if (key === 'admin') return { ok: false, error: 'Нельзя удалить администратора.' };
+    return withLatest(() => {
+      if (!db.users[key]) return { ok: false, error: 'Пользователь не найден.' };
+      delete db.users[key];
+      return { ok: true };
+    });
+  }
+
+  async function grantCards(target, requested) {
+    const move = {};
+    for (const card of window.BANK_CARDS) {
+      const amt = Number(requested && requested[card.id]);
+      move[card.id] = Number.isInteger(amt) && amt > 0 ? amt : 0;
+    }
+    if (!countCards(move)) return { ok: false, error: 'Выбери карточки для выдачи.' };
+    return withLatest(() => {
+      const targetKey = normalizeNick(target);
+      const targets = (targetKey === 'all' || target === 'Всем' || target === 'all')
+        ? Object.keys(db.users)
+        : (db.users[targetKey] ? [targetKey] : null);
+      if (!targets) return { ok: false, error: 'Пользователь не найден.' };
+      for (const key of targets) {
+        const user = db.users[key];
+        if (!user.inventory) user.inventory = normalizeInventory({});
+        for (const card of window.BANK_CARDS) {
+          if (move[card.id]) user.inventory[card.id] = (user.inventory[card.id] || 0) + move[card.id];
+        }
+        addHistory({ type: 'in', userKey: key, peer: 'admin', cards: { ...move }, memo: 'Выдача от админа' });
+      }
+      return { ok: true, count: targets.length };
     });
   }
 
@@ -381,6 +444,9 @@
     countCards,
     transfer,
     createDemoUsers,
+    getUsers,
+    deleteUser,
+    grantCards,
     exportData,
     importData,
     pull,

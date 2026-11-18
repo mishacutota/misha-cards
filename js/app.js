@@ -6,7 +6,7 @@
   const CARDS = window.BANK_CARDS;
   const store = window.BankStore;
   const el = (id) => document.getElementById(id);
-  const state = { key: null, user: null, send: {}, mode: 'login', nextDailyAt: 0, busy: false };
+  const state = { key: null, user: null, send: {}, adminSend: {}, mode: 'login', nextDailyAt: 0, busy: false, isAdmin: false };
   const number = (value) => new Intl.NumberFormat('ru-RU').format(value);
   let toastTimer = null;
   let dailyTimer = null;
@@ -59,6 +59,7 @@
     state.key = result.key;
     state.user = store.getUser(result.key);
     state.nextDailyAt = result.daily ? result.daily.nextAt : state.user.lastDailyAt + 86400000;
+    state.isAdmin = (result.key === 'admin');
     el('auth-pin').value = '';
     enterGame();
     if (result.daily && result.daily.issued) {
@@ -78,6 +79,8 @@
     state.key = null;
     state.user = null;
     state.send = {};
+    state.adminSend = {};
+    state.isAdmin = false;
     el('screen-bank').classList.add('hidden');
     el('screen-auth').classList.remove('hidden');
     el('auth-pin').value = '';
@@ -89,7 +92,9 @@
     el('screen-auth').classList.add('hidden');
     el('screen-bank').classList.remove('hidden');
     state.send = {};
+    state.adminSend = {};
     el('to-nick').value = '';
+    updateAdminVisibility();
     renderAll();
     switchTab('wallet');
     clearInterval(dailyTimer);
@@ -99,6 +104,14 @@
     // updates happen on tab focus, manual refresh and user actions.
     document.removeEventListener('visibilitychange', handleVisibility);
     document.addEventListener('visibilitychange', handleVisibility);
+  }
+
+  function updateAdminVisibility() {
+    const tab = el('tab-admin');
+    if (tab) tab.classList.toggle('hidden', !state.isAdmin);
+    if (!state.isAdmin && document.querySelector('.tab.active') && document.querySelector('.tab.active').dataset.tab === 'admin') {
+      switchTab('wallet');
+    }
   }
 
   function handleVisibility() {
@@ -153,6 +166,7 @@
   function switchTab(tab) {
     document.querySelectorAll('.tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
     document.querySelectorAll('[data-panel]').forEach(panel => panel.classList.toggle('hidden', panel.dataset.panel !== tab));
+    if (tab === 'admin') renderAdmin();
   }
 
   function renderHeader() {
@@ -191,7 +205,6 @@
   }
 
   function cardTile(card, amount) {
-    const img = card.image || `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="50" text-anchor="middle" fill="white" font-size="36">${escapeHtml(card.emoji)}</text></svg>`;
     return `
       <article class="card-tile rarity-${card.rarityKey}" style="--card-bg:${card.bg};--card-glow:${card.glow}">
         <span class="card-orbit card-orbit-a" aria-hidden="true"></span>
@@ -200,10 +213,9 @@
           <span class="card-rarity">${escapeHtml(card.rarity)}</span>
           <span class="card-qty">×${amount}</span>
         </div>
-        <div class="card-art"><img src="${img}" alt="${escapeHtml(card.name)}" style="width:42px;height:50px;object-fit:contain"></div>
+        <div class="card-art"><span class="card-emoji">${card.emoji}</span></div>
         <div class="card-copy">
           <div class="card-name">${escapeHtml(card.name)}</div>
-          <div class="card-tag">${escapeHtml(card.tag)}</div>
         </div>
         <div class="card-foot"><span>${number(card.spark)} ✨</span><span>MISHA CARDS</span></div>
       </article>`;
@@ -238,7 +250,19 @@
     }).join('');
   }
 
+  function renderRecentRecipients() {
+    const box = el('recent-recipients');
+    if (!box) return;
+    const list = (state.user && Array.isArray(state.user.recentRecipients)) ? state.user.recentRecipients : [];
+    if (!list.length) { box.innerHTML = ''; box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    box.innerHTML = '<span class="recent-label">Недавние получатели:</span>' + list.map(nik =>
+      `<button type="button" class="recent-chip" data-nick="${escapeHtml(nik)}">${escapeHtml(nik)}</button>`
+    ).join('');
+  }
+
   function renderSend() {
+    renderRecentRecipients();
     const owned = CARDS.filter(card => state.user.inventory[card.id] > 0);
     if (!owned.length) {
       el('send-rows').innerHTML = '<div class="empty">Пока нечего дарить — дождись ежедневного дропа! 🎁</div>';
@@ -250,12 +274,11 @@
     el('send-rows').innerHTML = owned.map(card => {
       const picked = state.send[card.id] || 0;
       const have = state.user.inventory[card.id];
-      const img = card.image || `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="50" text-anchor="middle" fill="white" font-size="16">${escapeHtml(card.emoji)}</text></svg>`;
       return `
         <div class="send-row ${picked ? 'picked' : ''}" data-card="${card.id}">
-          <div class="send-mini rarity-${card.rarityKey}" style="--card-bg:${card.bg}"><img src="${img}" alt="" style="width:20px;height:28px;object-fit:contain"></div>
+          <div class="send-mini rarity-${card.rarityKey}" style="--card-bg:${card.bg}"><span class="send-emoji">${card.emoji}</span></div>
           <div class="send-info">
-            <strong>${escapeHtml(card.name)} <span class="rarity-label">${escapeHtml(card.rarity)}</span></strong>
+            <strong>${escapeHtml(card.name)}</strong>
             <small>${have} шт · ${number(card.spark)} ✨ за карточку</small>
           </div>
           <div class="stepper">
@@ -327,7 +350,7 @@
     const recipient = store.findUser(raw);
     if (!recipient || recipient.key === state.key) { toast('Проверь ник получателя', true); updateSendTotals(); return; }
     // запоминаем ник для следующего перевода
-    lastRecipient = raw;
+    state.lastRecipient = raw;
     setBusy(true);
     el('btn-send').disabled = true;
     const result = await store.transfer(state.key, raw, state.send);
@@ -367,16 +390,93 @@
       : '<li><span class="lb-nick muted">Пока один ты</span></li>';
   }
 
-let lastRecipient = '';
+  function renderAdmin() {
+    const users = store.getUsers().filter(u => u.key !== 'admin');
+    el('admin-users').innerHTML = users.length
+      ? users.map(u => `
+          <div class="admin-user">
+            <div class="admin-user-info">
+              <strong>${escapeHtml(u.nick)}</strong>
+              <small>${u.cards} карточек · ${number(u.sparks)} ✨</small>
+            </div>
+            <button type="button" class="btn danger small" data-del="${escapeHtml(u.key)}">Удалить</button>
+          </div>`).join('')
+      : '<div class="empty">Пока нет пользователей</div>';
+
+    const sel = el('admin-target');
+    sel.innerHTML = '<option value="">— выбери —</option>' +
+      '<option value="__all__">Всем игрокам</option>' +
+      users.map(u => `<option value="${escapeHtml(u.key)}">${escapeHtml(u.nick)}</option>`).join('');
+
+    el('admin-card-rows').innerHTML = CARDS.map(card => {
+      const picked = state.adminSend[card.id] || 0;
+      return `
+        <div class="send-row ${picked ? 'picked' : ''}" data-card="${card.id}">
+          <div class="send-mini rarity-${card.rarityKey}" style="--card-bg:${card.bg}"><span class="send-emoji">${card.emoji}</span></div>
+          <div class="send-info">
+            <strong>${escapeHtml(card.name)}</strong>
+            <small>${number(card.spark)} ✨ за карточку</small>
+          </div>
+          <div class="stepper">
+            <button type="button" data-act="minus" ${picked <= 0 ? 'disabled' : ''}>−</button>
+            <span class="stepper-val">${picked}</span>
+            <button type="button" data-act="plus">+</button>
+          </div>
+        </div>`;
+    }).join('');
+    updateAdminTotals();
+  }
+
+  function updateAdminTotals() {
+    const spark = CARDS.reduce((sum, card) => sum + (state.adminSend[card.id] || 0) * card.spark, 0);
+    const count = store.countCards(state.adminSend);
+    el('admin-total-value').textContent = number(spark);
+    el('admin-total-count').textContent = count ? `${count} карточек · ${number(spark)} ✨` : 'ничего не выбрано';
+    el('btn-admin-grant').disabled = !count || !el('admin-target').value;
+  }
+
+  function changeAdminAmount(cardId, delta) {
+    const next = Math.max(0, (state.adminSend[cardId] || 0) + delta);
+    if (next) state.adminSend[cardId] = next;
+    else delete state.adminSend[cardId];
+    renderAdmin();
+  }
+
+  async function doDeleteUser(key) {
+    if (state.busy) return;
+    if (!window.confirm('Удалить этого игрока? Действие нельзя отменить.')) return;
+    setBusy(true);
+    const result = await store.deleteUser(key);
+    setBusy(false);
+    if (!result.ok) { toast(result.error, true); return; }
+    toast('Пользователь удалён');
+    renderAdmin();
+    renderAll();
+  }
+
+  async function doGrant() {
+    if (state.busy) return;
+    const target = el('admin-target').value;
+    if (!target) { toast('Выбери, кому выдать карточки', true); return; }
+    setBusy(true);
+    const result = await store.grantCards(target === '__all__' ? 'all' : target, state.adminSend);
+    setBusy(false);
+    if (!result.ok) { toast(result.error, true); return; }
+    state.adminSend = {};
+    toast('Карточки выданы');
+    renderAdmin();
+    renderAll();
+  }
 
   function renderAll() {
     renderWallet();
     renderSend();
     renderBank();
     updateOnlineBadge();
+    if (state.isAdmin && document.querySelector('[data-panel="admin"]:not(.hidden)')) renderAdmin();
     // запоминаем ник при открытии экрана подарка
-    if (state.key && !el('to-nick').value) {
-      el('to-nick').value = lastRecipient;
+    if (state.key && !el('to-nick').value && state.lastRecipient) {
+      el('to-nick').value = state.lastRecipient;
     }
   }
 
@@ -452,6 +552,35 @@ let lastRecipient = '';
     });
     const refresh = el('btn-refresh');
     if (refresh) refresh.addEventListener('click', () => syncFromServer(true));
+
+    const recent = el('recent-recipients');
+    if (recent) recent.addEventListener('click', event => {
+      const chip = event.target.closest('.recent-chip');
+      if (!chip) return;
+      el('to-nick').value = chip.dataset.nick;
+      updateSendTotals();
+      searchRecipient();
+    });
+
+    const adminRows = el('admin-card-rows');
+    if (adminRows) adminRows.addEventListener('click', event => {
+      const button = event.target.closest('button[data-act]');
+      if (!button) return;
+      const row = button.closest('[data-card]');
+      if (row) changeAdminAmount(row.dataset.card, button.dataset.act === 'plus' ? 1 : -1);
+    });
+
+    const adminUsers = el('admin-users');
+    if (adminUsers) adminUsers.addEventListener('click', event => {
+      const button = event.target.closest('button[data-del]');
+      if (button) doDeleteUser(button.dataset.del);
+    });
+
+    const adminTarget = el('admin-target');
+    if (adminTarget) adminTarget.addEventListener('change', updateAdminTotals);
+
+    const btnGrant = el('btn-admin-grant');
+    if (btnGrant) btnGrant.addEventListener('click', doGrant);
   }
 
   async function boot() {
@@ -464,6 +593,7 @@ let lastRecipient = '';
     const user = savedKey ? store.getUser(savedKey) : null;
     if (savedKey && user) {
       state.key = savedKey;
+      state.isAdmin = (savedKey === 'admin');
       const result = await store.claimDaily(savedKey);
       state.user = store.getUser(savedKey);
       if (!state.user) { logout(); return; }
