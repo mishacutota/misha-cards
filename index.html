@@ -117,9 +117,10 @@
 
       <!-- ---------- ПОДАРОК ---------- -->
       <section class="panel hidden" data-panel="send">
-        <label class="field">
+        <label class="field nick-field">
           <span>Ник получателя</span>
           <input id="to-nick" type="text" maxlength="16" placeholder="кому дарим карточки?" autocomplete="off" />
+          <ul id="nick-suggestions" class="nick-suggestions hidden"></ul>
         </label>
         <div id="recent-recipients" class="recent-recipients"></div>
         <p id="send-hint" class="hint"></p>

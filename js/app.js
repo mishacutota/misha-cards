@@ -261,6 +261,20 @@
     ).join('');
   }
 
+  function renderNickSuggestions() {
+    const box = el('nick-suggestions');
+    if (!box) return;
+    const raw = el('to-nick').value.trim().toLowerCase();
+    if (!raw) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    const users = store.getUsers().filter(u => u.key !== state.key);
+    const matches = users.filter(u => u.nick.toLowerCase().startsWith(raw) || u.nick.toLowerCase().includes(raw)).slice(0, 8);
+    if (!matches.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    box.classList.remove('hidden');
+    box.innerHTML = matches.map(u =>
+      `<li class="nick-suggestion" data-nick="${escapeHtml(u.nick)}">${escapeHtml(u.nick)}</li>`
+    ).join('');
+  }
+
   function renderSend() {
     renderRecentRecipients();
     const owned = CARDS.filter(card => state.user.inventory[card.id] > 0);
@@ -523,15 +537,30 @@
     });
     el('to-nick').addEventListener('input', event => {
       event.target.value = event.target.value.replace(/\s/g, '');
+      renderNickSuggestions();
       updateSendTotals();
       clearTimeout(searchTimer);
       searchTimer = setTimeout(searchRecipient, 450);
+    });
+    el('to-nick').addEventListener('focus', () => {
+      store.pull().then(() => { state.user = store.getUser(state.key); renderNickSuggestions(); });
+    });
+    el('to-nick').addEventListener('blur', () => {
+      setTimeout(() => { const b = el('nick-suggestions'); if (b) b.classList.add('hidden'); }, 150);
     });
     el('btn-send').addEventListener('click', doTransfer);
     const refresh = el('btn-refresh');
     if (refresh) refresh.addEventListener('click', () => syncFromServer(true));
 
-    const recent = el('recent-recipients');
+    const sug = el('nick-suggestions');
+    if (sug) sug.addEventListener('click', event => {
+      const item = event.target.closest('.nick-suggestion');
+      if (!item) return;
+      el('to-nick').value = item.dataset.nick;
+      const b = el('nick-suggestions'); if (b) { b.classList.add('hidden'); b.innerHTML = ''; }
+      updateSendTotals();
+      searchRecipient();
+    });
     if (recent) recent.addEventListener('click', event => {
       const chip = event.target.closest('.recent-chip');
       if (!chip) return;

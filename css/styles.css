@@ -649,6 +649,35 @@ body {
 .recent-chip:hover { border-color: rgba(247, 201, 72, 0.5); }
 .recent-chip:active { transform: scale(0.96); }
 
+/* ---------- подсказки ника ---------- */
+.nick-field { position: relative; }
+.nick-suggestions {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.nick-suggestions.hidden { display: none; }
+.nick-suggestion {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.nick-suggestion:hover { background: rgba(247, 201, 72, 0.12); color: var(--accent); }
+
 /* ---------- админ-панель ---------- */
 .admin-users { display: flex; flex-direction: column; gap: 8px; }
 .admin-user {
