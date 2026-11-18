@@ -334,26 +334,21 @@
     });
   }
 
-  async function createDemoUsers() {
+  async function purgeTestAccounts() {
     return withLatest(() => {
-      const names = ['demo_fox', 'demo_cat', 'demo_star'];
-      let created = 0;
-      for (const nick of names) {
-        const key = normalizeNick(nick);
-        if (db.users[key]) continue;
-        const inventory = normalizeInventory(STARTER);
-        for (const card of window.BANK_CARDS) {
-          const granted = Math.min(inventory[card.id], db.stock[card.id]);
-          inventory[card.id] = granted;
-          db.stock[card.id] -= granted;
+      const removed = [];
+      for (const key of Object.keys(db.users)) {
+        if (key === 'admin') continue;
+        const user = db.users[key];
+        const nick = (user && user.nick) ? user.nick : key;
+        const isTest = /_test$/i.test(nick) || /^demo_/i.test(nick) ||
+          key === 'admintest_user' || key === 'alice' || key === 'bob';
+        if (isTest) {
+          delete db.users[key];
+          removed.push(nick);
         }
-         const user = { nick, pin: '', createdAt: Date.now(), inventory, lastDailyAt: 0, recentRecipients: [] };
-        db.users[key] = user;
-        addHistory({ type: 'mint', userKey: key, peer: '', cards: { ...inventory }, memo: 'Коллекция игрока' });
-        const daily = issueDaily(key);
-        if (daily.ok) created++;
       }
-      return { ok: true, created };
+      return { ok: true, removed };
     });
   }
 
@@ -468,8 +463,8 @@
     total,
     countCards,
     transfer,
-    createDemoUsers,
     getUsers,
+    purgeTestAccounts,
     deleteUser,
     adjustUserCards,
     clearHistory,

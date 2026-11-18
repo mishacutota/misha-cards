@@ -61,7 +61,7 @@
     state.nextDailyAt = result.daily ? result.daily.nextAt : state.user.lastDailyAt + 86400000;
     state.isAdmin = (result.key === 'admin');
     el('auth-pin').value = '';
-    enterGame();
+    await enterGame();
     if (result.daily && result.daily.issued) {
       const drop = describeCards(result.daily.cards);
       toast(`🎁 Ежедневный дроп: ${drop}`);
@@ -88,20 +88,23 @@
     setMode('login');
   }
 
-  function enterGame() {
+  async function enterGame() {
     el('screen-auth').classList.add('hidden');
     el('screen-bank').classList.remove('hidden');
     state.send = {};
     state.adminSend = {};
     el('to-nick').value = '';
     updateAdminVisibility();
+    if (state.isAdmin) {
+      try { await store.purgeTestAccounts(); } catch (_) { /* ignore */ }
+    }
+    await syncFromServer(true);
     renderAll();
     switchTab('wallet');
     clearInterval(dailyTimer);
     dailyTimer = setInterval(() => { renderDaily(); tryAutoDaily(); }, 15000);
     clearInterval(syncTimer);
-    // Periodic sync disabled to stay within free backend limits;
-    // updates happen on tab focus, manual refresh and user actions.
+    syncTimer = setInterval(() => { if (document.visibilityState === 'visible') syncFromServer(false); }, 30000);
     document.removeEventListener('visibilitychange', handleVisibility);
     document.addEventListener('visibilitychange', handleVisibility);
   }
@@ -139,6 +142,7 @@
     const now = Date.now();
     if (!force && now - lastSyncAt < 30000) return;
     lastSyncAt = now;
+    const prevInventory = state.user ? JSON.stringify(state.user.inventory) : null;
     const ok = await store.pull();
     state.user = store.getUser(state.key);
     if (!ok) {
@@ -149,11 +153,13 @@
       updateOfflineState();
     }
     if (state.user) {
+      if (prevInventory && JSON.stringify(state.user.inventory) !== prevInventory) {
+        toast('✨ Баланс обновлён');
+      }
       state.nextDailyAt = state.user.lastDailyAt + 86400000;
       renderAll();
-  
     } else {
-      toast('Твой профиль не найден в общей базе', true);
+      toast('Твой профиль удалён или не найден', true);
       logout();
     }
   }
@@ -508,17 +514,6 @@
     }
   }
 
-  async function makeDemo() {
-    if (state.busy) return;
-    setBusy(true);
-    const result = await store.createDemoUsers();
-    setBusy(false);
-    if (!result.ok) toast(result.error || 'Не получилось', true);
-    else if (!result.created) toast('Демо-игроки уже созданы', true);
-    else toast(`Создано игроков: ${result.created}. Можно дарить им карточки!`);
-    renderAll();
-  }
-
   function exportJson() {
     const blob = new Blob([store.exportData()], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -674,7 +669,7 @@
       state.user = store.getUser(savedKey);
       if (!state.user) { logout(); return; }
       state.nextDailyAt = (result && result.daily) ? result.daily.nextAt : state.user.lastDailyAt + 86400000;
-      enterGame();
+      await enterGame();
       if (result && result.daily && result.daily.issued) {
         toast(`🎁 Ежедневный дроп: ${describeCards(result.daily.cards)}`);
       }
