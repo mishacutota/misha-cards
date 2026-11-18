@@ -6,10 +6,13 @@
   const CARDS = window.BANK_CARDS;
   const store = window.BankStore;
   const el = (id) => document.getElementById(id);
-  const state = { key: null, user: null, send: {}, mode: 'login', nextDailyAt: 0 };
+  const state = { key: null, user: null, send: {}, mode: 'login', nextDailyAt: 0, busy: false };
   const number = (value) => new Intl.NumberFormat('ru-RU').format(value);
   let toastTimer = null;
   let dailyTimer = null;
+  let syncTimer = null;
+  let searchTimer = null;
+  let lastSyncAt = 0;
 
   function toast(message, isError) {
     const node = el('toast');
@@ -24,6 +27,14 @@
     return String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   }
 
+  function setBusy(value) {
+    state.busy = value;
+    const submit = el('auth-submit');
+    if (submit) submit.disabled = value;
+    const send = el('btn-send');
+    if (send) send.disabled = value || send.disabled;
+  }
+
   function setMode(mode) {
     state.mode = mode;
     document.querySelectorAll('.switch-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
@@ -32,11 +43,14 @@
     el('auth-error').textContent = '';
   }
 
-  function handleAuth(event) {
+  async function handleAuth(event) {
     event.preventDefault();
+    if (state.busy) return;
     const nick = el('auth-nick').value.trim();
     const pin = el('auth-pin').value.trim();
-    const result = state.mode === 'login' ? store.login(nick, pin) : store.register(nick, pin);
+    setBusy(true);
+    const result = state.mode === 'login' ? await store.login(nick, pin) : await store.register(nick, pin);
+    setBusy(false);
     if (!result.ok) {
       el('auth-error').textContent = result.error;
       return;
@@ -58,6 +72,9 @@
   function logout() {
     try { localStorage.removeItem(SESSION_KEY); } catch (_) { /* ignore */ }
     clearInterval(dailyTimer);
+    clearInterval(syncTimer);
+    document.removeEventListener('visibilitychange', handleVisibility);
+    lastSyncAt = 0;
     state.key = null;
     state.user = null;
     state.send = {};
@@ -76,7 +93,61 @@
     renderAll();
     switchTab('wallet');
     clearInterval(dailyTimer);
-    dailyTimer = setInterval(renderDaily, 30000);
+    dailyTimer = setInterval(() => { renderDaily(); tryAutoDaily(); }, 15000);
+    clearInterval(syncTimer);
+    // Periodic sync disabled to stay within free backend limits;
+    // updates happen on tab focus, manual refresh and user actions.
+    document.removeEventListener('visibilitychange', handleVisibility);
+    document.addEventListener('visibilitychange', handleVisibility);
+  }
+
+  function handleVisibility() {
+    if (document.visibilityState === 'visible' && state.key) syncFromServer(false);
+  }
+
+  async function tryAutoDaily() {
+    if (!state.key || state.busy) return;
+    const user = store.getUser(state.key);
+    if (!user) return;
+    if (Date.now() - (user.lastDailyAt || 0) < 86400000) return;
+    state.busy = true;
+    const result = await store.claimDaily(state.key);
+    state.busy = false;
+    if (result && result.ok) {
+      state.user = store.getUser(state.key);
+      state.nextDailyAt = result.daily ? result.daily.nextAt : state.user.lastDailyAt + 86400000;
+      renderAll();
+      if (result.daily && result.daily.issued) toast(`🎁 Новый ежедневный дроп: ${describeCards(result.daily.cards)}`);
+    }
+  }
+
+  async function syncFromServer(force) {
+    if (!state.key || state.busy) return;
+    const now = Date.now();
+    if (!force && now - lastSyncAt < 30000) return;
+    lastSyncAt = now;
+    await store.pull();
+    state.user = store.getUser(state.key);
+    if (state.user) {
+      state.nextDailyAt = state.user.lastDailyAt + 86400000;
+      renderAll();
+      updateOnlineBadge();
+    } else {
+      toast('Твой профиль не найден в общей базе', true);
+      logout();
+    }
+  }
+
+  function updateOnlineBadge() {
+    const badge = el('online-badge');
+    if (!badge) return;
+    if (store.isOnline()) {
+      badge.textContent = '🌐 общая база';
+      badge.classList.remove('offline');
+    } else {
+      badge.textContent = '📴 локально';
+      badge.classList.add('offline');
+    }
   }
 
   function switchTab(tab) {
@@ -93,6 +164,7 @@
     el('top-balance').textContent = `${number(sparks)} ✨`;
     el('wallet-balance').textContent = number(sparks);
     el('wallet-count').textContent = String(store.countCards(state.user.inventory));
+    updateOnlineBadge();
   }
 
   function describeCards(inventory) {
@@ -107,7 +179,7 @@
     const canDrop = !remaining;
     el('daily-banner').classList.toggle('daily-ready', canDrop);
     el('daily-title').textContent = canDrop ? 'Ежедневный дроп готов!' : 'Следующие карточки скоро';
-    el('daily-sub').textContent = canDrop ? 'Зайди снова, чтобы получить новые карточки' : 'Карточки появляются автоматически при входе';
+    el('daily-sub').textContent = canDrop ? 'Новые карточки появятся автоматически' : 'Карточки появляются автоматически при входе';
     if (canDrop) {
       el('daily-timer').textContent = '🎁 готово';
     } else {
@@ -199,9 +271,20 @@
     const count = store.countCards(state.send);
     el('send-total-value').textContent = number(spark);
     el('send-total-count').textContent = count ? `${count} карточек · ${number(spark)} ✨` : 'ничего не выбрано';
-    const recipient = store.findUser(el('to-nick').value);
-    el('btn-send').disabled = !count || !recipient || recipient.key === state.key;
+    const recipient = store.findUser(el('to-nick').value.trim());
+    el('btn-send').disabled = state.busy || !count || !recipient || recipient.key === state.key;
     updateRecipientHint(recipient);
+  }
+
+  async function searchRecipient() {
+    if (!state.key) return;
+    const raw = el('to-nick').value.trim();
+    if (!raw) { updateSendTotals(); return; }
+    const hint = el('send-hint');
+    if (hint) hint.textContent = 'Ищем игрока в общей коллекции…';
+    await store.pull();
+    state.user = store.getUser(state.key);
+    updateSendTotals();
   }
 
   function updateRecipientHint(recipient) {
@@ -210,8 +293,8 @@
     const raw = el('to-nick').value.trim();
     if (!raw) { hint.textContent = ''; note.textContent = ''; return; }
     if (!recipient) {
-      hint.textContent = 'Игрок с таким ником не найден в этом браузере.';
-      note.textContent = 'Проверь ник. Подарки доступны только между профилями в этой коллекции.';
+      hint.textContent = 'Игрок с таким ником не найден в общей коллекции.';
+      note.textContent = 'Проверь ник. Подарки доступны всем игрокам, которые зарегистрировались.';
       return;
     }
     if (recipient.key === state.key) {
@@ -231,13 +314,26 @@
     renderSend();
   }
 
-  function doTransfer() {
-    const result = store.transfer(state.key, el('to-nick').value.trim(), state.send);
-    if (!result.ok) { toast(result.error, true); return; }
+  async function doTransfer() {
+    if (state.busy) return;
+    const count = store.countCards(state.send);
+    if (!count) { toast('Выбери карточки для подарка', true); return; }
+    // pull fresh so recipient lookup is accurate across browsers
+    await store.pull();
+    state.user = store.getUser(state.key);
+    const recipient = store.findUser(el('to-nick').value.trim());
+    if (!recipient || recipient.key === state.key) { toast('Проверь ник получателя', true); updateSendTotals(); return; }
+    setBusy(true);
+    el('btn-send').disabled = true;
+    const result = await store.transfer(state.key, el('to-nick').value.trim(), state.send);
+    setBusy(false);
+    if (!result.ok) { toast(result.error, true); updateSendTotals(); return; }
     state.user = store.getUser(state.key);
     state.send = {};
+    el('to-nick').value = '';
     renderAll();
     toast(`🎁 Карточки отправлены игроку ${result.recipient}!`);
+    // refresh recipient side implicitly via shared db; their browser pulls on focus/sync
   }
 
   function renderBank() {
@@ -275,9 +371,13 @@
     renderBank();
   }
 
-  function makeDemo() {
-    const result = store.createDemoUsers();
-    if (!result.created) toast('Демо-игроки уже созданы', true);
+  async function makeDemo() {
+    if (state.busy) return;
+    setBusy(true);
+    const result = await store.createDemoUsers();
+    setBusy(false);
+    if (!result.ok) toast(result.error || 'Не получилось', true);
+    else if (!result.created) toast('Демо-игроки уже созданы', true);
     else toast(`Создано игроков: ${result.created}. Можно дарить им карточки!`);
     renderAll();
   }
@@ -295,10 +395,12 @@
     toast('Резервная копия коллекции выгружена');
   }
 
-  function importJson(file) {
+  async function importJson(file) {
     const reader = new FileReader();
-    reader.onload = () => {
-      const result = store.importData(String(reader.result || ''));
+    reader.onload = async () => {
+      setBusy(true);
+      const result = await store.importData(String(reader.result || ''));
+      setBusy(false);
       if (!result.ok) { toast(result.error, true); return; }
       const session = store.findUser(state.user ? state.user.nick : '');
       if (session) {
@@ -328,6 +430,8 @@
     el('to-nick').addEventListener('input', event => {
       event.target.value = event.target.value.replace(/\s/g, '');
       updateSendTotals();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(searchRecipient, 450);
     });
     el('btn-send').addEventListener('click', doTransfer);
     el('btn-demo').addEventListener('click', makeDemo);
@@ -337,28 +441,27 @@
       if (file) importJson(file);
       event.target.value = '';
     });
+    const refresh = el('btn-refresh');
+    if (refresh) refresh.addEventListener('click', () => syncFromServer(true));
   }
 
-  function boot() {
+  async function boot() {
     bind();
     setMode('login');
+    await store.pull();
+    updateOnlineBadge();
     let savedKey = null;
     try { savedKey = localStorage.getItem(SESSION_KEY); } catch (_) { /* ignore */ }
     const user = savedKey ? store.getUser(savedKey) : null;
     if (savedKey && user) {
       state.key = savedKey;
-      const result = store.login(user.nick, '');
-      /* Сессия остаётся локальной; не запрашиваем ПИН повторно при перезагрузке. */
-      if (result.ok) {
-        state.user = store.getUser(savedKey);
-        state.nextDailyAt = result.daily.nextAt;
-        enterGame();
-      } else {
-        /* Восстанавливаем сессию без повторной проверки ПИН; ежедневный дроп выдаётся один раз. */
-        store.claimDaily(savedKey);
-        state.user = store.getUser(savedKey);
-        state.nextDailyAt = state.user.lastDailyAt + 86400000;
-        enterGame();
+      const result = await store.claimDaily(savedKey);
+      state.user = store.getUser(savedKey);
+      if (!state.user) { logout(); return; }
+      state.nextDailyAt = (result && result.daily) ? result.daily.nextAt : state.user.lastDailyAt + 86400000;
+      enterGame();
+      if (result && result.daily && result.daily.issued) {
+        toast(`🎁 Ежедневный дроп: ${describeCards(result.daily.cards)}`);
       }
     } else {
       el('screen-auth').classList.remove('hidden');

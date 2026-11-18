@@ -331,8 +331,9 @@ body {
   flex-direction: column;
   justify-content: space-between;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.34);
+  background: var(--card-bg);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.34), 0 0 22px var(--card-glow);
   transition: transform 0.2s;
 }
 .card-tile:hover { transform: translateY(-3px); }
@@ -385,10 +386,73 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 8px;
-  letter-spacing: 0.1em;
-  opacity: 0.7;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+  font-weight: 600;
 }
+
+.card-rarity {
+  padding: 2px 7px;
+  border-radius: 7px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: rgba(0, 0, 0, 0.34);
+}
+
+.card-orbit {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+.card-orbit-a {
+  width: 90px; height: 90px;
+  top: -30px; right: -20px;
+  background: radial-gradient(circle, rgba(255,255,255,0.35), transparent 70%);
+  animation: float 6s ease-in-out infinite;
+}
+.card-orbit-b {
+  width: 60px; height: 60px;
+  bottom: -20px; left: -10px;
+  background: radial-gradient(circle, rgba(255,255,255,0.2), transparent 70%);
+  animation: float 8s ease-in-out infinite reverse;
+}
+
+.card-art {
+  position: relative;
+  z-index: 1;
+  font-size: 34px;
+  line-height: 1;
+  text-align: center;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.4));
+}
+
+.card-copy { position: relative; z-index: 1; }
+.card-name { font-size: 12px; font-weight: 800; letter-spacing: 0.02em; }
+.card-tag { font-size: 9px; opacity: 0.8; margin-top: 2px; }
+
+.rarity-label { font-size: 9px; opacity: 0.7; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+
+.online-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(55, 224, 160, 0.12);
+  border: 1px solid rgba(55, 224, 160, 0.3);
+  color: var(--mint);
+  white-space: nowrap;
+}
+.online-badge.offline {
+  background: rgba(255, 107, 107, 0.12);
+  border-color: rgba(255, 107, 107, 0.3);
+  color: #ff9a9a;
+}
+
+.btn.small { padding: 6px 10px; font-size: 12px; }
 .card-chip {
   width: 18px;
   height: 13px;
