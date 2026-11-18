@@ -92,7 +92,7 @@
       <nav class="tabs" role="tablist">
         <button class="tab active" data-tab="wallet" type="button">Коллекция</button>
         <button class="tab" data-tab="send" type="button">Подарить</button>
-        <button class="tab" data-tab="bank" type="button">Тираж</button>
+        <button class="tab" data-tab="bank" type="button">Топ</button>
         <button class="tab hidden" data-tab="admin" type="button" id="tab-admin">Админ</button>
       </nav>
 
@@ -140,29 +140,11 @@
         <p class="note">Карточки сразу уходят из твоей коллекции и появляются у получателя. Никаких комиссий.</p>
       </section>
 
-      <!-- ---------- ТИРАЖ ---------- -->
+      <!-- ---------- ТОП ---------- -->
       <section class="panel hidden" data-panel="bank">
-        <h3 class="section-title">Тираж карточек</h3>
-        <p class="muted small">У каждой карточки ограниченный тираж. Когда остаток закончится — новые такие карточки в дроп не попадут.</p>
-        <div id="supply-list" class="supply-list"></div>
-
-        <h3 class="section-title">Топ коллекционеров</h3>
+        <h3 class="section-title">Топ по богатству</h3>
+        <p class="muted small">Список игроков, отсортированный по количеству искр в коллекции.</p>
         <ul id="leaderboard" class="leaderboard"></ul>
-
-        <h3 class="section-title">Соседи по игре</h3>
-        <p class="muted small">Нужен кто-то для подарка? Создай демо-игроков — они получат карточки из тиража.</p>
-        <div class="btn-row">
-          <button id="btn-demo" class="btn" type="button">Создать демо-игроков</button>
-        </div>
-
-        <h3 class="section-title">Перенос коллекции</h3>
-        <div class="btn-row">
-          <button id="btn-export" class="btn" type="button">Выгрузить JSON</button>
-          <label class="btn file-btn">
-            Загрузить JSON
-            <input id="import-file" type="file" accept="application/json,.json" />
-          </label>
-        </div>
       </section>
 
       <!-- ---------- АДМИН ---------- -->

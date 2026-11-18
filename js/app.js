@@ -364,21 +364,6 @@
   }
 
   function renderBank() {
-    const stock = store.getStock();
-    el('supply-list').innerHTML = CARDS.map(card => {
-      const left = stock[card.id];
-      const minted = card.limit - left;
-      const percent = Math.round((minted / card.limit) * 100);
-      return `
-        <div class="supply-item rarity-row rarity-${card.rarityKey}">
-          <div class="supply-head">
-            <span>${card.emoji} ${escapeHtml(card.name)} <small class="rarity-label">${escapeHtml(card.rarity)}</small></span>
-            <span>${left} / ${card.limit} в тираже</span>
-          </div>
-          <div class="bar" role="img" aria-label="выдано ${percent}%"><i style="width:${percent}%;background:${card.glow}"></i></div>
-        </div>`;
-    }).join('');
-
     const top = store.getLeaderboard();
     el('leaderboard').innerHTML = top.length
       ? top.map((row, index) => `
@@ -543,13 +528,6 @@
       searchTimer = setTimeout(searchRecipient, 450);
     });
     el('btn-send').addEventListener('click', doTransfer);
-    el('btn-demo').addEventListener('click', makeDemo);
-    el('btn-export').addEventListener('click', exportJson);
-    el('import-file').addEventListener('change', event => {
-      const file = event.target.files && event.target.files[0];
-      if (file) importJson(file);
-      event.target.value = '';
-    });
     const refresh = el('btn-refresh');
     if (refresh) refresh.addEventListener('click', () => syncFromServer(true));
 
