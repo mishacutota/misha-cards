@@ -71,16 +71,8 @@
   let online = false;
   let lastError = '';
 
-  function saveLocal() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); } catch (_) {}
-  }
-
-  function loadLocal() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? normalizeDb(JSON.parse(raw)) : null;
-    } catch (_) { return null; }
-  }
+  function saveLocal() { /* no-op: app is online-only */ }
+  function loadLocal() { return null; }
 
   // Чтение общей базы. textdb.online кэшируется через Cloudflare, поэтому
   // добавляем параметр-обходчик кэша и не полагаемся на HTTP-кэш браузера.
@@ -95,13 +87,11 @@
       db = normalizeDb(json);
       online = true;
       lastError = '';
-      saveLocal();
       return true;
     } catch (e) {
       online = false;
       lastError = String(e && e.message || e);
-      const cached = loadLocal();
-      if (cached) db = cached;
+      db = createEmptyDb();
       return false;
     }
   }

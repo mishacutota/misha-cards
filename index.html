@@ -174,7 +174,14 @@
     </section>
   </main>
 
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="offline-overlay" class="offline-overlay hidden">
+    <div class="offline-card">
+      <div class="offline-emoji">📡</div>
+      <h2>Нет интернета</h2>
+      <p>Приложение работает только онлайн. Ждём появления сети…</p>
+      <div class="offline-spinner"></div>
+    </div>
+  </div>
 
   <script src="js/cards.js"></script>
   <script src="js/store.js"></script>

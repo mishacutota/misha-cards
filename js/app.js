@@ -6,7 +6,7 @@
   const CARDS = window.BANK_CARDS;
   const store = window.BankStore;
   const el = (id) => document.getElementById(id);
-  const state = { key: null, user: null, send: {}, adminSend: {}, mode: 'login', nextDailyAt: 0, busy: false, isAdmin: false };
+  const state = { key: null, user: null, send: {}, adminSend: {}, mode: 'login', nextDailyAt: 0, busy: false, isAdmin: false, lastRecipient: '' };
   const number = (value) => new Intl.NumberFormat('ru-RU').format(value);
   let toastTimer = null;
   let dailyTimer = null;
@@ -139,8 +139,15 @@
     const now = Date.now();
     if (!force && now - lastSyncAt < 30000) return;
     lastSyncAt = now;
-    await store.pull();
+    const ok = await store.pull();
     state.user = store.getUser(state.key);
+    if (!ok) {
+      state.netDown = true;
+      updateOfflineState();
+    } else {
+      state.netDown = false;
+      updateOfflineState();
+    }
     if (state.user) {
       state.nextDailyAt = state.user.lastDailyAt + 86400000;
       renderAll();
@@ -320,9 +327,20 @@
     const raw = el('to-nick').value.trim();
     if (!raw) { updateSendTotals(); return; }
     const hint = el('send-hint');
-    if (hint) hint.textContent = 'Ищем игрока в общей коллекции…';
-    await store.pull();
-    state.user = store.getUser(state.key);
+    let recipient = store.findUser(raw);
+    if (!recipient) {
+      if (hint) hint.textContent = 'Ищем игрока в общей коллекции…';
+      await store.pull();
+      state.user = store.getUser(state.key);
+      recipient = store.findUser(raw);
+    }
+    if (recipient && recipient.key !== state.key) {
+      if (hint) hint.textContent = '';
+    } else if (recipient && recipient.key === state.key) {
+      if (hint) hint.textContent = 'Это твоя коллекция 🙂 Выбери другого игрока.';
+    } else {
+      if (hint) hint.textContent = 'Игрок с таким ником не найден в общей коллекции.';
+    }
     updateSendTotals();
   }
 
@@ -393,13 +411,13 @@
     const users = store.getUsers().filter(u => u.key !== 'admin');
     el('admin-users').innerHTML = users.length
       ? users.map(u => `
-          <div class="admin-user">
-            <div class="admin-user-info">
-              <strong>${escapeHtml(u.nick)}</strong>
-              <small>${u.cards} карточек · ${number(u.sparks)} ✨</small>
-            </div>
-            <button type="button" class="btn danger small" data-del="${escapeHtml(u.key)}">Удалить</button>
-          </div>`).join('')
+           <div class="admin-user">
+             <div class="admin-user-info">
+               <span class="au-nick">${escapeHtml(u.nick)}</span>
+               <span class="au-stats">${u.cards} карточек · ${number(u.sparks)} ✨</span>
+             </div>
+             <button type="button" class="btn danger small" data-del="${escapeHtml(u.key)}">Удалить</button>
+           </div>`).join('')
       : '<div class="empty">Пока нет пользователей</div>';
 
     const sel = el('admin-target');
@@ -540,7 +558,7 @@
       renderNickSuggestions();
       updateSendTotals();
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(searchRecipient, 450);
+      searchTimer = setTimeout(searchRecipient, 900);
     });
     el('to-nick').addEventListener('focus', () => {
       store.pull().then(() => { state.user = store.getUser(state.key); renderNickSuggestions(); });
@@ -561,6 +579,7 @@
       updateSendTotals();
       searchRecipient();
     });
+    const recent = el('recent-recipients');
     if (recent) recent.addEventListener('click', event => {
       const chip = event.target.closest('.recent-chip');
       if (!chip) return;
@@ -590,11 +609,38 @@
     if (btnGrant) btnGrant.addEventListener('click', doGrant);
   }
 
+  let booted = false;
+  let bound = false;
+
+  function updateOfflineState() {
+    const overlay = el('offline-overlay');
+    if (!overlay) return;
+    const online = navigator.onLine !== false && !state.netDown;
+    overlay.classList.toggle('hidden', online);
+  }
+
   async function boot() {
-    bind();
+    if (navigator.onLine === false) {
+      state.netDown = true;
+      updateOfflineState();
+      setTimeout(boot, 2000);
+      return;
+    }
+    if (booted) return;
+    if (!bound) { bound = true; bind(); }
+    booted = true;
     setMode('login');
-    await store.pull();
+    const ok = await store.pull();
     updateOnlineBadge();
+    if (!ok) {
+      state.netDown = true;
+      booted = false;
+      updateOfflineState();
+      setTimeout(boot, 3000);
+      return;
+    }
+    state.netDown = false;
+    updateOfflineState();
     let savedKey = null;
     try { savedKey = localStorage.getItem(SESSION_KEY); } catch (_) { /* ignore */ }
     const user = savedKey ? store.getUser(savedKey) : null;
@@ -615,5 +661,17 @@
     }
   }
 
+  updateOfflineState();
+  window.addEventListener('online', () => {
+    state.netDown = false;
+    updateOfflineState();
+    if (!booted) boot();
+    else if (state.key) syncFromServer(true);
+  });
+  window.addEventListener('offline', () => {
+    state.netDown = true;
+    updateOfflineState();
+  });
   boot();
+  setInterval(updateOfflineState, 3000);
 })();
