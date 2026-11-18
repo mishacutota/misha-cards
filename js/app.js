@@ -191,6 +191,7 @@
   }
 
   function cardTile(card, amount) {
+    const img = card.image || `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="50" text-anchor="middle" fill="white" font-size="36">${escapeHtml(card.emoji)}</text></svg>`;
     return `
       <article class="card-tile rarity-${card.rarityKey}" style="--card-bg:${card.bg};--card-glow:${card.glow}">
         <span class="card-orbit card-orbit-a" aria-hidden="true"></span>
@@ -199,7 +200,7 @@
           <span class="card-rarity">${escapeHtml(card.rarity)}</span>
           <span class="card-qty">×${amount}</span>
         </div>
-        <div class="card-art" aria-hidden="true">${card.emoji}</div>
+        <div class="card-art"><img src="${img}" alt="${escapeHtml(card.name)}" style="width:42px;height:50px;object-fit:contain"></div>
         <div class="card-copy">
           <div class="card-name">${escapeHtml(card.name)}</div>
           <div class="card-tag">${escapeHtml(card.tag)}</div>
@@ -249,9 +250,10 @@
     el('send-rows').innerHTML = owned.map(card => {
       const picked = state.send[card.id] || 0;
       const have = state.user.inventory[card.id];
+      const img = card.image || `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="50" text-anchor="middle" fill="white" font-size="16">${escapeHtml(card.emoji)}</text></svg>`;
       return `
         <div class="send-row ${picked ? 'picked' : ''}" data-card="${card.id}">
-          <div class="send-mini rarity-${card.rarityKey}" style="--card-bg:${card.bg}">${card.emoji}</div>
+          <div class="send-mini rarity-${card.rarityKey}" style="--card-bg:${card.bg}"><img src="${img}" alt="" style="width:20px;height:28px;object-fit:contain"></div>
           <div class="send-info">
             <strong>${escapeHtml(card.name)} <span class="rarity-label">${escapeHtml(card.rarity)}</span></strong>
             <small>${have} шт · ${number(card.spark)} ✨ за карточку</small>
@@ -321,19 +323,21 @@
     // pull fresh so recipient lookup is accurate across browsers
     await store.pull();
     state.user = store.getUser(state.key);
-    const recipient = store.findUser(el('to-nick').value.trim());
+    const raw = el('to-nick').value.trim();
+    const recipient = store.findUser(raw);
     if (!recipient || recipient.key === state.key) { toast('Проверь ник получателя', true); updateSendTotals(); return; }
+    // запоминаем ник для следующего перевода
+    lastRecipient = raw;
     setBusy(true);
     el('btn-send').disabled = true;
-    const result = await store.transfer(state.key, el('to-nick').value.trim(), state.send);
+    const result = await store.transfer(state.key, raw, state.send);
     setBusy(false);
     if (!result.ok) { toast(result.error, true); updateSendTotals(); return; }
     state.user = store.getUser(state.key);
     state.send = {};
     el('to-nick').value = '';
     renderAll();
-    toast(`🎁 Карточки отправлены игроку ${result.recipient}!`);
-    // refresh recipient side implicitly via shared db; their browser pulls on focus/sync
+    toast(`🎁 Карточки отправлены игроку ${recipient.nick}!`);
   }
 
   function renderBank() {
@@ -363,12 +367,17 @@
       : '<li><span class="lb-nick muted">Пока один ты</span></li>';
   }
 
+let lastRecipient = '';
+
   function renderAll() {
-    renderHeader();
-    renderDaily();
     renderWallet();
     renderSend();
     renderBank();
+    updateOnlineBadge();
+    // запоминаем ник при открытии экрана подарка
+    if (state.key && !el('to-nick').value) {
+      el('to-nick').value = lastRecipient;
+    }
   }
 
   async function makeDemo() {
